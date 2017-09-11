@@ -1,0 +1,60 @@
+?h2o.gbm
+
+df <- list_buckets[[2]] %>% .[!(colnames(.) %in% c('user_ref','devvar_th_extract_date'))]
+df2 <- list_orig[[2]] %>% .[!(colnames(.) %in% c('user_ref','devvar_th_extract_date'))]
+predictors <- colnames(df) %>% .[.!='gbf']
+
+m0 <- gbm(gbf~.,
+          distribution = 'bernoulli',
+          data = df,
+          n.trees = 1000,
+          interaction.depth = 1,
+          shrinkage = 0.01,
+          bag.fraction = 0.5,
+          cv.folds = 4,
+          keep.data = F)
+best.iter <- gbm.perf(m0, method="cv", plot.it = F)
+oddsp0 <- predict.gbm(m0,df,n.trees = best.iter)
+yp0 <- 1/(1/exp(oddsp0)+1)
+(gini0 <- pROC::auc(df$gbf,oddsp0) * 2 -1)
+plot(density(oddsp0,bw=0.01))
+calibrate.plot(df$gbf, yp0, xlim=c(0,1), ylim=c(0,1))
+
+m1 <- gbm(gbf~.,
+          distribution = 'bernoulli',
+          data = df,
+          n.trees = 1000,
+          interaction.depth = 3,
+          shrinkage = 0.01,
+          bag.fraction = 0.5,
+          cv.folds = 4,
+          keep.data = F)
+best.iter <- gbm.perf(m1, method="cv", plot.it = F)
+oddsp1 <- predict.gbm(m1,df,n.trees = best.iter)
+yp <- 1/(1/exp(oddsp1)+1)
+(gini1 <- pROC::auc(df$gbf,oddsp1) * 2 -1)
+plot(density(oddsp1,bw=0.01))
+calibrate.plot(df$gbf, yp, xlim=c(0.9,1), ylim=c(0.9,1))
+
+perc <- quantile(oddsp1,(0:100)/100)
+low <- perc[1:100]
+high <- perc[2:101]
+df_calib <- data.frame(df$gbf, oddsp1)
+df_calib$band <- NA
+for (i in 1:nrow(df_calib)) {
+  df_calib$band[i] <- first(which(df_calib$oddsp1[i]>=low & df_calib$oddsp1[i]<=high))
+}
+df_calib2 <- df_calib %>%
+  group_by(band) %>%
+  summarise(loggb = log(sum(df.gbf)/sum(1-df.gbf)),
+            avgodds = mean(oddsp1)) %>%
+  ungroup()
+plot(df_calib2$loggb~df_calib2$avgodds)
+abline(0,1)
+
+#h2o gbm
+h2o.init()
+h2odf <- as.h2o(df)
+m2 <- h2o.gbm('gbf', predictors, df_buckets,
+              ntrees = 2000, max_depth = 3, min_rows = 10,
+              )

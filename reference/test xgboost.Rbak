@@ -1,0 +1,53 @@
+#install.packages('xgboost', lib="T:/Mufeng Zou/R/R-3.4.1/library")
+#install.packages('DiagrammeR', lib="T:/Mufeng Zou/R/R-3.4.1/library")
+
+require(xgboost)
+
+data(agaricus.train, package='xgboost')
+data(agaricus.test, package='xgboost')
+train <- agaricus.train
+test <- agaricus.test
+
+str(train)
+
+
+dim(train$data)
+dim(test$data)
+
+class(train$data)[1]
+
+bstSparse <- xgboost(data = train$data, label = train$label, max_depth = 2, eta = 1,
+                     nthread = 2, nrounds = 2, objective = "binary:logistic")
+
+
+bstDense <- xgboost(data = as.matrix(train$data), label = train$label, max_depth = 2,
+                    eta = 1, nthread = 2, nrounds = 2, objective = "binary:logistic")
+
+dtrain <- xgb.DMatrix(data = train$data, label = train$label)
+bstDMatrix <- xgboost(data = dtrain, max_depth = 2, eta = 1, nthread = 2, nrounds = 2, objective = "binary:logistic")
+
+
+bst <- xgboost(data = dtrain, max_depth = 2, eta = 1, nthread = 2, nrounds = 2,
+               objective = "binary:logistic", verbose = 2)
+
+pred <- predict(bst, test$data)
+print(head(pred))
+
+err <- mean(as.numeric(pred > 0.5) != test$label)
+print(paste("test-error=", err))
+
+dtrain <- xgb.DMatrix(data = train$data, label=train$label)
+dtest <- xgb.DMatrix(data = test$data, label=test$label)
+
+bst <- xgb.train(data=dtrain, max_depth=1, eta=0.01, nthread = 2, nrounds=10000,
+                 watchlist=watchlist, eval_metric = "error", objective = "binary:logistic",
+                 colsample_bytree=0.8, print_every_n=10, early_stopping_rounds=100)
+
+bst <- xgb.cv(data=dtrain, max_depth=1, eta=0.01, nthread = 2, nrounds=10000, nfold=5,
+              objective = "binary:logistic", colsample_bytree=0.8, print_every_n=10,
+              early_stopping_rounds=100)
+
+importance_matrix <- xgb.importance(model = bst)
+xgb.plot.importance(importance_matrix = importance_matrix)
+xgb.model.dt.tree(model=bst)
+
